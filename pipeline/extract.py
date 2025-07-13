@@ -104,7 +104,7 @@ def get_all_reviews(game_id: int = 1) -> dict:
     }
 
 
-def run_extract() -> None:
+def run_extract() -> dict:
     """Runs extract script and returns found reviews."""
     logger = get_logger()
     args = get_terminal_args()
@@ -113,8 +113,7 @@ def run_extract() -> None:
     else:
         reviews = get_all_reviews(866570)
     if reviews:
-        print(reviews["title"])
-        print(reviews["review_desc"])
+        return reviews
     else:
         logger.critical("Game not found.")
 
