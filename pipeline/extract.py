@@ -1,16 +1,9 @@
 """Script for extracting the Steam API from a specified ID."""
 
-import time
-import csv
-import os
-import re
-from datetime import datetime
-
-import requests
-import pandas as pd
 import urllib
 import argparse
-import tqdm
+
+import requests
 
 from utilities import get_logger, set_logger
 
@@ -21,27 +14,21 @@ STEAM_API_URL_TWO = "?json=1&filter=recent&language=english&purchase_type=all&nu
 STEAM_API_URL_THREE = "https://store.steampowered.com/api/appdetails?appids="
 
 
-def get_steam_api_request_reviews(game_id: int = 420,
-                                  cursor: str = "*") -> dict:
-    """Returns review json object from a given Steam app URL call.
-    Repeated in loop to get all reviews."""
+def get_steam_api_request(game_id: int, is_review: bool, cursor: str = "*") -> dict:
+    """Depending on is_review, either:
+    True: Returns block of reviews json object from a given Steam app URL call.
+    False: Returns details json object from a given Steam app URL call."""
     logger = get_logger()
 
-    local_steam_url = STEAM_API_URL_ONE + \
-        str(game_id) + STEAM_API_URL_TWO + cursor
-    response = requests.get(local_steam_url, timeout=10)
-    if response.status_code != 200:
-        logger.critical("Could not connect to Steam API.")
-        raise ConnectionError("Could not connect to Steam API.")
-    return response.json()
+    if game_id < 0:
+        logger.critical("id is a negative value. Halting.")
+        raise ValueError("id is a negative value. Halting.")
 
-
-def get_steam_api_request_details(game_id: int = 420) -> dict:
-    """Returns details about given steam ID (title, developers)
-    Repeated in loop to get all reviews."""
-    logger = get_logger()
-
-    local_steam_url = STEAM_API_URL_THREE + str(game_id)
+    if is_review:
+        local_steam_url = STEAM_API_URL_ONE + \
+            str(game_id) + STEAM_API_URL_TWO + cursor
+    else:
+        local_steam_url = STEAM_API_URL_THREE + str(game_id)
     response = requests.get(local_steam_url, timeout=10)
     if response.status_code != 200:
         logger.critical("Could not connect to Steam API.")
@@ -55,10 +42,10 @@ def get_all_reviews(game_id: int = 1) -> dict:
     logger = get_logger()
     all_reviews = []
 
-    initial_request_reviews = get_steam_api_request_reviews(game_id, "*")
+    initial_request_reviews = get_steam_api_request(game_id, True, "*")
     if initial_request_reviews["success"] == "8":
         return None
-    request_details = get_steam_api_request_details(game_id)[
+    request_details = get_steam_api_request(game_id, False)[
         str(game_id)]
     if not request_details["success"]:
         return None
@@ -78,10 +65,10 @@ def get_all_reviews(game_id: int = 1) -> dict:
     current_review_num = total_reviews_in_req
 
     while total_reviews_in_req > 0:
-        if len(all_reviews) > 10000:
-            logger.info("Stopping retrieval as review count exceeds 10000.")
+        if len(all_reviews) > 1000:
+            logger.info("Stopping retrieval as review count exceeds 1000.")
             break
-        next_req = get_steam_api_request_reviews(game_id, cursor_returned)
+        next_req = get_steam_api_request(game_id, True, cursor_returned)
         total_reviews_in_req = next_req["query_summary"]["num_reviews"]
         all_reviews += next_req["reviews"]
         cursor_returned = urllib.parse.quote_plus(next_req["cursor"])
@@ -104,18 +91,22 @@ def get_all_reviews(game_id: int = 1) -> dict:
     }
 
 
-def run_extract() -> dict:
+def run_extract(input_id: int = None) -> dict:
     """Runs extract script and returns found reviews."""
     logger = get_logger()
-    args = get_terminal_args()
-    if args:
-        reviews = get_all_reviews(args.id)
+    if not input_id:
+        args = get_terminal_args()
+        if args:
+            reviews = get_all_reviews(args.id)
+        else:
+            raise ValueError("No id input.")
     else:
-        reviews = get_all_reviews(866570)
+        reviews = get_all_reviews(input_id)
     if reviews:
+        print(reviews)
         return reviews
-    else:
-        logger.critical("Game not found.")
+    logger.critical("Game not found.")
+    return {"success": False}
 
 
 def get_terminal_args() -> argparse.Namespace:

@@ -4,3 +4,4 @@ pytest-cov
 requests
 pandas
 tqdm
+urllib3==1.26.6
