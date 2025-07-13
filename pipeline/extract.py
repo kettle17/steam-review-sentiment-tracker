@@ -17,7 +17,8 @@ STEAM_API_URL_THREE = "https://store.steampowered.com/api/appdetails?appids="
 def get_steam_api_request(game_id: int, is_review: bool, cursor: str = "*") -> dict:
     """Depending on is_review, either:
     True: Returns block of reviews json object from a given Steam app URL call.
-    False: Returns details json object from a given Steam app URL call."""
+    False: Returns details json object from a given Steam app URL call.
+    Separated from fetch_api_data to allow mocking."""
     logger = get_logger()
 
     if game_id < 0:
@@ -36,16 +37,38 @@ def get_steam_api_request(game_id: int, is_review: bool, cursor: str = "*") -> d
     return response.json()
 
 
+def fetch_api_data(game_id: int, is_review: bool, cursor: str = "*") -> dict:
+    """Returns data fetched from Steam's API and initially validates it."""
+    logger = get_logger()
+    if cursor:
+        api_data = get_steam_api_request(game_id, is_review, cursor)
+    else:
+        api_data = get_steam_api_request(game_id, is_review)
+
+    if is_review:
+        if not api_data.get('reviews'):
+            logger.critical("API data did not return correctly.")
+            raise ValueError("API data did not return correctly.")
+    else:
+        if not api_data.get(str(game_id)):
+            logger.critical("API data did not return correctly.")
+            raise ValueError("API data did not return correctly.")
+        if not api_data[str(game_id)]["success"]:
+            logger.critical("API data did not return correctly.")
+            raise ValueError("API data did not return correctly.")
+    return api_data
+
+
 def get_all_reviews(game_id: int = 1) -> dict:
     """Retrieves basic data & review data in increments of 100.
     Stops when all reviews are retrieved."""
     logger = get_logger()
     all_reviews = []
 
-    initial_request_reviews = get_steam_api_request(game_id, True, "*")
+    initial_request_reviews = fetch_api_data(game_id, True, "*")
     if initial_request_reviews["success"] == "8":
         return None
-    request_details = get_steam_api_request(game_id, False)[
+    request_details = fetch_api_data(game_id, False)[
         str(game_id)]
     if not request_details["success"]:
         return None
@@ -68,7 +91,7 @@ def get_all_reviews(game_id: int = 1) -> dict:
         if len(all_reviews) > 1000:
             logger.info("Stopping retrieval as review count exceeds 1000.")
             break
-        next_req = get_steam_api_request(game_id, True, cursor_returned)
+        next_req = fetch_api_data(game_id, True, cursor_returned)
         total_reviews_in_req = next_req["query_summary"]["num_reviews"]
         all_reviews += next_req["reviews"]
         cursor_returned = urllib.parse.quote_plus(next_req["cursor"])
